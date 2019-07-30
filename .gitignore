@@ -100,3 +100,9 @@ all.config
 
 # fetched Android config fragments
 android/configs/android-*.cfg
+
+out
+arch/arm64/boot/dtb
+zip/Image.gz
+zip/dtb
+zip/modules/vendor/lib/modules

@@ -7,25 +7,25 @@ DATE_POSTFIX=$(date +"%Y%m%d")
 ## Copy this script inside the kernel directory
 KERNEL_DIR=$PWD
 KERNEL_TOOLCHAIN=$PWD/../../prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-CLANG_TOOLCHAIN=$PWD/../../prebuilts-master/clang/host/linux-x86/clang-5696680/bin/clang-9
+CLANG_TOOLCHAIN=$PWD/../../prebuilts-master/clang/host/linux-x86/clang-5657785/bin/clang-9
 KERNEL_DEFCONFIG=sanders_defconfig
 DTBTOOL=$KERNEL_DIR/tools/
-JOBS=4
+JOBS=8
 ZIP_DIR=$KERNEL_DIR/zip/
 KERNEL=MAYHEM-KERNEL
-TYPE=EAS-oc
+TYPE=ngxson
 RELEASE=Unravel-v4
 FINAL_KERNEL_ZIP=$KERNEL-$TYPE-$RELEASE-$DATE_POSTFIX.zip
 # Speed up build process
 MAKE="./makeparallel"
 
 BUILD_START=$(date +"%s")
-blue='\033[0;34m'
+blue='\033[0;36m'
 cyan='\033[0;36m'
 #red
-R='\033[05;31m'
+R='\033[0;33m'
 #purple
-P='\e[0;35m'
+P='\033[0;36m'
 yellow='\033[0;33m'
 red='\033[0;31m'
 nocol='\033[0m'
@@ -35,8 +35,10 @@ export CROSS_COMPILE=$KERNEL_TOOLCHAIN
 export ARCH=arm64
 export SUBARCH=arm64
 
-echo -e  "$R // Cleaning up //"
-make clean && make mrproper && rm -rf out/
+if [ $1 = "clean" ]; then
+   echo -e  "$R // Cleaning up //"
+   make clean && make mrproper && rm -rf out/
+fi
 
 echo -e "$cyan // defconfig is set to $KERNEL_DEFCONFIG //"
 echo -e "$blue***********************************************"
