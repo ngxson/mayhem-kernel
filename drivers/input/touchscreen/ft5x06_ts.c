@@ -36,6 +36,7 @@
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/proc_fs.h>
+#include <linux/screen_off_gestures.h>
 
 
 #if defined(CONFIG_FB)
@@ -58,6 +59,15 @@ static irqreturn_t ft5x06_ts_interrupt(int irq, void *data);
 
 #include <linux/usb.h>
 #include <linux/power_supply.h>
+
+#ifdef CONFIG_SCREEN_OFF_GESTURES
+#include <linux/screen_off_gestures.h>
+static bool suspended = false;
+bool scr_suspended(void)
+{
+	return suspended;
+}
+#endif
 
 
 #define FT_DRIVER_VERSION	0x02
@@ -1737,6 +1747,11 @@ static int ft5x06_ts_suspend(struct device *dev)
 	struct ft5x06_ts_data *data = dev_get_drvdata(dev);
 	int err;
 
+#ifdef CONFIG_SCREEN_OFF_GESTURES
+	printk("ft5x06_ts_suspend");
+	suspended = true;
+#endif
+
 	if (data->loading_fw) {
 		dev_info(dev, "Firmware loading in process...\n");
 		return 0;
@@ -1749,6 +1764,12 @@ static int ft5x06_ts_suspend(struct device *dev)
 
 	data->flash_enabled = false;
 	ft5x06_secure_touch_stop(data, true);
+
+#ifdef CONFIG_SCREEN_OFF_GESTURES
+	if (dt2w_switch) {
+		return 0;
+	}
+#endif
 
 	if (ft5x06_gesture_support_enabled() && data->pdata->gesture_support &&
 		device_may_wakeup(dev) &&
@@ -1771,6 +1792,11 @@ static int ft5x06_ts_resume(struct device *dev)
 	struct ft5x06_ts_data *data = dev_get_drvdata(dev);
 	int err;
 
+#ifdef CONFIG_SCREEN_OFF_GESTURES
+	printk("ft5x06_ts_resume");
+	suspended = false;
+#endif
+
 	if (!data->suspended) {
 		dev_dbg(dev, "Already in awake state\n");
 		return 0;
@@ -1782,6 +1808,12 @@ static int ft5x06_ts_resume(struct device *dev)
 
 	data->flash_enabled = true;
 	ft5x06_secure_touch_stop(data, true);
+
+#ifdef CONFIG_SCREEN_OFF_GESTURES
+	if (dt2w_switch) {
+		return 0;
+	}
+#endif
 
 	if (ft5x06_gesture_support_enabled() && data->pdata->gesture_support &&
 		device_may_wakeup(dev) &&

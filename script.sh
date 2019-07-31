@@ -35,9 +35,14 @@ export CROSS_COMPILE=$KERNEL_TOOLCHAIN
 export ARCH=arm64
 export SUBARCH=arm64
 
-if [ $1 = "clean" ]; then
-   echo -e  "$R // Cleaning up //"
-   make clean && make mrproper && rm -rf out/
+if [[ $1 == "clean" ]]; then
+    echo -e  "$R // Cleaning up //"
+    rm -rf arch/arm64/boot/dtb
+    rm -rf zip/Image.gz
+    rm -rf zip/dtb
+    rm -rf $KERNEL_DIR/out/
+    rm -rf zip/modules/vendor/lib/modules
+    make clean && make mrproper && rm -rf out/
 fi
 
 echo -e "$cyan // defconfig is set to $KERNEL_DEFCONFIG //"
@@ -93,13 +98,7 @@ cp $KERNEL_DIR/zip/$FINAL_KERNEL_ZIP $KERNEL_DIR/../../$FINAL_KERNEL_ZIP
 
 echo -e "$yellow // Build Successfull  //"
 cd $KERNEL_DIR
-rm -rf arch/arm64/boot/dtb
 rm -rf $ZIP_DIR/$FINAL_KERNEL_ZIP
-rm -rf zip/Image.gz
-rm -rf zip/dtb
-rm -rf zip/modules/vendor/lib/modules/*.ko
-rm -rf $KERNEL_DIR/out/
-rm -rf zip/modules/vendor/lib/modules
 
 BUILD_END=$(date +"%s")
 DIFF=$(($BUILD_END - $BUILD_START))

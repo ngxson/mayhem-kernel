@@ -37,7 +37,7 @@
 */
 
 /* Tuneables */
-#define WG_DEBUG		                0
+#define WG_DEBUG		                1
 
 /* Redmi Note 3 */
 #define SWEEP_Y_MAX             1920
@@ -52,7 +52,9 @@
 #define SWEEP_X_FINAL           270
 #define SWEEP_Y_NEXT            135
 #define DT2W_FEATHER		150
-#define DT2W_TIME 		500
+#define DT2W_TIME_MAX 		500
+#define DT2W_TIME_MIN 		50
+#define DT2W_PWRKEY_DUR     20
 
 /* Wake Gestures */
 #define SWEEP_TIMEOUT		300
@@ -68,6 +70,7 @@
 #define KEY_GESTURE_SWIPE_DOWN        624
 #define KEY_GESTURE_SWIPE_UP          625
 #define KEY_GESTURE_DOUBLE_TAP        626
+#define KEY_POWER_ON	              101
 
 #define LOGTAG			"WG"
 
@@ -91,6 +94,7 @@ static struct workqueue_struct *screen_off_gestures_input_wq;
 static struct workqueue_struct *dt2w_input_wq;
 static struct work_struct screen_off_gestures_input_work;
 static struct work_struct dt2w_input_work;
+static DEFINE_MUTEX(pwrkeyworklock);
 
 static bool is_suspended(void)
 {
@@ -123,12 +127,28 @@ static void new_touch(int x, int y) {
 	touch_nr++;
 }
 
+/* PowerKey work func */
+static void doubletap2wake_presspwr(struct work_struct * doubletap2wake_presspwr_work) {
+	if (!mutex_trylock(&pwrkeyworklock))
+		return;
+	printk("DT2W_PWRKEY_PRESS");
+	input_event(wake_dev, EV_KEY, KEY_POWER, 1);
+	input_event(wake_dev, EV_SYN, 0, 0);
+	msleep(DT2W_PWRKEY_DUR);
+	input_event(wake_dev, EV_KEY, KEY_POWER, 0);
+	input_event(wake_dev, EV_SYN, 0, 0);
+	msleep(DT2W_PWRKEY_DUR);
+	mutex_unlock(&pwrkeyworklock);
+	return;
+}
+static DECLARE_WORK(doubletap2wake_presspwr_work, doubletap2wake_presspwr);
+
 /* Doubletap2wake main function */
 static void detect_doubletap2wake(int x, int y, bool st)
 {
         bool single_touch = st;
 #if WG_DEBUG
-        pr_info(LOGTAG"x,y(%4d,%4d) tap_time_pre:%llu\n",
+        printk(LOGTAG" x,y(%4d,%4d) tap_time_pre:%llu\n",
                 x, y, tap_time_pre);
 #endif
 	if (x < SWEEP_EDGE || x > sweep_x_limit)
@@ -143,7 +163,8 @@ static void detect_doubletap2wake(int x, int y, bool st)
 		} else if (touch_nr == 1) {
 			if ((calc_feather(x, x_pre) < DT2W_FEATHER) &&
 			    (calc_feather(y, y_pre) < DT2W_FEATHER) &&
-			    ((ktime_to_ms(ktime_get())-tap_time_pre) < DT2W_TIME))
+			    ((ktime_to_ms(ktime_get())-tap_time_pre) < DT2W_TIME_MAX) &&
+			    ((ktime_to_ms(ktime_get())-tap_time_pre) > DT2W_TIME_MIN))
 				touch_nr++;
 			else {
 				doubletap2wake_reset();
@@ -153,12 +174,10 @@ static void detect_doubletap2wake(int x, int y, bool st)
 			doubletap2wake_reset();
 			new_touch(x, y);
 		}
-		if ((touch_nr > 1)) {
+		if (touch_nr > 1) {
 			exec_count = false;
-            input_report_key(wake_dev, KEY_GESTURE_DOUBLE_TAP, 1);
-            input_sync(wake_dev);
-            input_report_key(wake_dev, KEY_GESTURE_DOUBLE_TAP, 0);
-            input_sync(wake_dev);
+			printk("KEY_GESTURE_DOUBLE_TAP");
+            schedule_work(&doubletap2wake_presspwr_work);
 			doubletap2wake_reset();
 		}
 	}
@@ -192,7 +211,7 @@ static void detect_screen_off_gestures_v(int x, int y, bool st)
 	}
 
 #if WG_DEBUG
-        pr_info(LOGTAG"screen_off_gestures vert  x,y(%4d,%4d) single:%s\n",
+        printk(LOGTAG"screen_off_gestures vert  x,y(%4d,%4d) single:%s\n",
                 x, y, (single_touch) ? "true" : "false");
 #endif
 
@@ -264,7 +283,7 @@ static void detect_screen_off_gestures_h(int x, int y, bool st, bool scr_suspend
 	}
 
 #if WG_DEBUG
-        pr_info(LOGTAG"screen_off_gestures Horz x,y(%4d,%4d) wake:%s\n",
+        printk(LOGTAG"screen_off_gestures Horz x,y(%4d,%4d) wake:%s\n",
                 x, y, (scr_suspended) ? "true" : "false");
 #endif
 	//left->right
@@ -343,23 +362,23 @@ static void dt2w_input_callback(struct work_struct *unused)
 static void wg_input_event(struct input_handle *handle, unsigned int type,
 				unsigned int code, int value)
 {
-	if (is_suspended() && code == ABS_MT_POSITION_X) {
+	/*if (is_suspended() && code == ABS_MT_POSITION_X) {
 		value -= 5000;
-	}
+	}*/
 	
 #if WG_DEBUG
-	pr_info("wg: code: %s|%u, val: %i\n",
+	/*printk("wg: code: %s|%u, val: %i\n",
 		((code==ABS_MT_POSITION_X) ? "X" :
 		(code==ABS_MT_POSITION_Y) ? "Y" :
 		(code==ABS_MT_TRACKING_ID) ? "ID" :
-		"undef"), code, value);
+		"undef"), code, value);*/
 #endif
 
-	if (code == ABS_MT_SLOT) {
+	/*if (code == ABS_MT_SLOT) {
 		screen_off_gestures_reset();
 		doubletap2wake_reset();
 		return;
-	}
+	}*/
 
 	if (code == ABS_MT_TRACKING_ID && value == -1) {
 		screen_off_gestures_reset();
@@ -381,16 +400,16 @@ static void wg_input_event(struct input_handle *handle, unsigned int type,
 	if (touch_x_called && touch_y_called) {
 		touch_x_called = false;
 		touch_y_called = false;
-		queue_work_on(0, screen_off_gestures_input_wq, &screen_off_gestures_input_work);
+		//queue_work_on(0, screen_off_gestures_input_wq, &screen_off_gestures_input_work);
 	} else if (!is_suspended() && touch_x_called && !touch_y_called) {
 		touch_x_called = false;
 		touch_y_called = false;
-		queue_work_on(0, screen_off_gestures_input_wq, &screen_off_gestures_input_work);
+		//queue_work_on(0, screen_off_gestures_input_wq, &screen_off_gestures_input_work);
 	}
 }
 
 static int input_dev_filter(struct input_dev *dev) {
-	if (strstr(dev->name, "synaptics_dsx_i2c")) {
+	if (strstr(dev->name, "ft5")) { // for ft5xxx touchscreen IC
 		return 0;
 	} else {
 		return 1;
@@ -467,8 +486,8 @@ static ssize_t doubletap2wake_dump(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	sscanf(buf, "%d ", &dt2w_switch);
-	if (dt2w_switch < 0 || dt2w_switch > 1)
-		dt2w_switch = 0;
+	if (dt2w_switch < 0) dt2w_switch = 0;
+	if (dt2w_switch > 0) dt2w_switch = 1;
 		
 	return count;
 }
@@ -590,6 +609,8 @@ static int __init screen_off_gestures_init(void)
 	input_set_capability(wake_dev, EV_KEY, KEY_GESTURE_SWIPE_DOWN);
 	input_set_capability(wake_dev, EV_KEY, KEY_GESTURE_SWIPE_UP);
 	input_set_capability(wake_dev, EV_KEY, KEY_GESTURE_DOUBLE_TAP);
+	input_set_capability(wake_dev, EV_KEY, KEY_POWER_ON);
+	input_set_capability(wake_dev, EV_KEY, KEY_POWER);
     wake_dev->name = "wg_pwrkey";
     wake_dev->phys = "wg_pwrkey/input0";
 
